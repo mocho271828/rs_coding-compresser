@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRコード データ符号化ツール (Wasm版)</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="wasm_exec.js"></script>
+    <script defer src="main.js"></script>
+    <style>
+        /* CSSは変更なし */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); }
+        h1, h2 { color: #0056b3; text-align: center; margin-bottom: 20px; }
+        form { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
+        label { font-weight: bold; margin-bottom: 5px; color: #555; }
+        textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; box-sizing: border-box; }
+        button { padding: 12px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        #status { text-align: center; margin-bottom: 20px; color: #666; }
+        .error-message { display: none; color: #d9534f; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; border-radius: 4px; margin-bottom: 20px; }
+        .results-container { display: none; } /* 初期状態では非表示 */
+        .results-section { border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px; }
+        .result-item, .process-item { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 6px; padding: 15px; margin-bottom: 15px; line-height: 1.6; overflow-wrap: break-word; }
+        .result-item strong, .process-item strong { color: #007bff; }
+        .step { margin-top: 10px; margin-bottom: 5px; color: #666; font-size: 0.9em; }
+        .step-value { font-family: 'Consolas', 'Monaco', monospace; background-color: #e9ecef; padding: 2px 5px; border-radius: 3px; }
+        .kanji-char { font-size: 1.5em; font-weight: bold; color: #28a745; margin-right: 10px; }
+        .math-block { margin-top: 10px; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>QRコード データ符号化ツール (型番1, 誤り訂正レベルL, Wasm)</h1>
+        
+        <p id="status">Wasmモジュールを読み込み中...</p>
+
+        <form id="encodeForm" style="display: none;">
+            <label for="kanjiInput">符号化したい漢字を入力してください (<span id="maxCharCount">9</span>文字まで):</label>
+            <textarea id="kanjiInput" name="kanjiInput" rows="3" placeholder="例: 土本幸多"></textarea>
+            <button type="submit">符号化</button>
+        </form>
+
+        <div id="error-container" class="error-message"></div>
+
+        <div id="results-container" class="results-container">
+            <div class="results-section">
+                <h2>STEP1-1: 13ビット圧縮</h2>
+                <div id="step1-results"></div>
+            </div>
+
+            <div class="results-section">
+                <h2>STEP1-2〜1-5: データコード語の生成</h2>
+                <div class="process-item" id="step2-results">
+                    </div>
+            </div>
+
+            <div class="results-section">
+                <h2>STEP1-6〜1-7: リード・ソロモン符号化</h2>
+                <div class="process-item" id="step3-results">
+                     </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
