@@ -1,0 +1,74 @@
+# .github/workflows/deploy.yml
+
+# ワークフローの名前
+name: Deploy to GitHub Pages
+
+# ワークフローが実行されるタイミングを指定
+on:
+  # mainブランチにプッシュされた時に実行
+  push:
+    branches:
+      - main
+  # 手動でも実行できるようにする
+  workflow_dispatch:
+
+# ワークフローがリポジトリに対して持つ権限を設定
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 実行するジョブを定義
+jobs:
+  # buildジョブ：静的ファイルをビルドする
+  build:
+    runs-on: ubuntu-latest # 実行環境としてUbuntuの最新版を使用
+    steps:
+      # ステップ1: リポジトリのソースコードをチェックアウトする
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ステップ2: Goの環境をセットアップする
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # あなたのgo.modに合わせたバージョンを指定
+
+      # ステップ3: wasm_exec.jsをGoのインストールディレクトリからコピーする
+      - name: Copy wasm_exec.js
+        run: cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
+
+      # ステップ4: WebAssemblyにビルドする
+      - name: Build WebAssembly
+        run: GOOS=js GOARCH=wasm go build -o main.wasm .
+
+      # ステップ5: 公開用ファイル一式を格納するディレクトリを作成する
+      - name: Create artifact directory
+        run: mkdir ./public
+
+      # ステップ6: 必要なファイルをpublicディレクトリにコピーする
+      - name: Copy files to artifact directory
+        run: |
+          cp main.wasm ./public
+          cp wasm_exec.js ./public
+          cp index.html ./public
+          cp app.js ./public
+
+      # ステップ7: publicディレクトリをGitHub Pages用の成果物としてアップロードする
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public/
+
+  # deployジョブ：ビルドされた成果物をデプロイする
+  deploy:
+    needs: build # buildジョブが成功したら実行される
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }} # デプロイ先のURLを自動で取得
+    steps:
+      # ステップ1: アップロードされた成果物をデプロイする
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
