@@ -1,6 +1,0 @@
-{
-    "go.build.env": {
-        "GOOS": "js",
-        "GOARCH": "wasm"
-    }
-}
