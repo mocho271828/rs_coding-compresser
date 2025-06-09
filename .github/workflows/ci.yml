@@ -1,4 +1,4 @@
-# .github/workflows/ci.yml (推奨版)
+# .github/workflows/ci.yml
 
 name: Go CI
 
@@ -16,9 +16,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # go-versionを明示的に指定せず、go.modからバージョンを読み込むようにします
+    # go-versionを指定せず、go.modからバージョンを読み込むようにします
     - name: Set up Go
       uses: actions/setup-go@v5
 
+    # ★★★ このステップを追加 ★★★
+    # go.modファイルに基づいて依存関係をダウンロードし、go.sumを更新します
+    - name: Install Dependencies
+      run: go mod tidy
+
     - name: Build
       run: go build -v -o myapp .
+
+    # ... (必要に応じてテスト等のステップ)
