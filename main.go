@@ -131,8 +131,9 @@ func processKanji(this js.Value, args []js.Value) any {
 	intermediate.CodewordHex = formatBytesToHex(codewordBytes)
 	intermediate.CodewordBinary = formatBytesToBinary(codewordBytes)
 
-	// Goのネイティブなマップをそのまま返す.
-	// 変換はjs.FuncOfが自動的に行ってくれる.
+	// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+	// 修正点：js.ValueOfを削除し、Goのネイティブなマップを返す
+	// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 	return map[string]any{
 		"results":      results,
 		"intermediate": intermediate,
