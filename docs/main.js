@@ -56,7 +56,7 @@ function renderResults(data) {
     
     resultsContainer.style.display = 'block';
 
-    // STEP1-1: 13ビット圧縮
+    // STEP1: 13ビット圧縮
     const step1Results = document.getElementById('step1-results');
     step1Results.innerHTML = data.Results.map(res => `
         <div class="result-item">
@@ -69,7 +69,7 @@ function renderResults(data) {
         </div>
     `).join('');
 
-    // STEP1-2〜1-5: データコード語の生成
+    // STEP2: データコード語の生成
     const step2Results = document.getElementById('step2-results');
     step2Results.innerHTML = `
         <strong>連結ビットストリーム:</strong><br>
@@ -81,7 +81,7 @@ function renderResults(data) {
         <div class="step"><strong>埋め草コード語付加後 (19バイト):</strong> <br><span class="step-value">${data.Intermediate.PaddedHex}</span></div>
     `;
 
-    // STEP1-6〜1-7: リード・ソロモン符号化
+    // STEP3: リード・ソロモン符号化
     const step3Results = document.getElementById('step3-results');
     step3Results.innerHTML = `
         <p>生成多項式 $G(x)$:</p>

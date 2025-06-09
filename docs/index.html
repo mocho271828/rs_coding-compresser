@@ -32,7 +32,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>QRコード データ符号化ツール (型番1, 誤り訂正レベルL, Wasm)</h1>
+        <h1>QRコード データ符号化ツール (型番1, 誤り訂正レベルL)</h1>
         
         <p id="status">Wasmモジュールを読み込み中...</p>
 
@@ -46,18 +46,18 @@
 
         <div id="results-container" class="results-container">
             <div class="results-section">
-                <h2>STEP1-1: 13ビット圧縮</h2>
+                <h2>STEP1: 13ビット圧縮</h2>
                 <div id="step1-results"></div>
             </div>
 
             <div class="results-section">
-                <h2>STEP1-2〜1-5: データコード語の生成</h2>
+                <h2>STEP2: データコード語の生成</h2>
                 <div class="process-item" id="step2-results">
                     </div>
             </div>
 
             <div class="results-section">
-                <h2>STEP1-6〜1-7: リード・ソロモン符号化</h2>
+                <h2>STEP3: リード・ソロモン符号化</h2>
                 <div class="process-item" id="step3-results">
                      </div>
             </div>

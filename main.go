@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"syscall/js" // WebAssemblyのために必要
+	"syscall/js" // WebAssemblyのため
 
 	"golang.org/x/text/encoding/japanese"
 )
@@ -22,7 +22,6 @@ const primitivePolynomial = 0x11D // 原始多項式: x^8 + x^4 + x^3 + x^2 + 1
 
 // RS符号の生成多項式の係数 (alphaのべき乗)
 var generatorPolyExponents = []int{87, 229, 146, 149, 238, 102, 21}
-
 
 // --- 構造体定義 (JSON出力用にタグを追加) ---
 
@@ -110,7 +109,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 		return data, fmt.Errorf("文字数が多すぎます. %d文字以下で入力してください.", maxCharCount)
 	}
 
-	// STEP 1-1
 	results, err := compressKanjiString(kanjiInput)
 	if err != nil {
 		return data, fmt.Errorf("圧縮処理中にエラーが発生しました: %v", err)
@@ -122,7 +120,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 		binaryBuilder.WriteString(res.Binary13Bit)
 	}
 
-	// STEP 1-2, 1-3
 	modeIndicator := "1000"
 	charCountIndicator := fmt.Sprintf("%08b", len(runes))
 	initialBitStream := modeIndicator + charCountIndicator + binaryBuilder.String()
@@ -132,7 +129,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 	data.Intermediate.ConcatenatedBinary = binaryBuilder.String()
 	data.Intermediate.TerminatedBinary = terminatedBitStream
 
-	// STEP 1-4
 	paddedStream := terminatedBitStream
 	if len(paddedStream)%8 != 0 {
 		paddedStream += strings.Repeat("0", 8-len(paddedStream)%8)
@@ -143,7 +139,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 	}
 	data.Intermediate.PaddedBinaryBlocks = strings.Join(paddedBinaryBlocks, " ")
 
-	// STEP 1-5
 	dataBytes := bitStreamToBytes(paddedStream)
 	// 仕様: データコード語が19個に満たない場合、交互に 11101100 (EC) と 00010001 (11) を追加
 	paddingBytes := []byte{0xEC, 0x11}
@@ -153,16 +148,14 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 		paddingIndex = (paddingIndex + 1) % 2
 	}
 	data.Intermediate.PaddedHex = formatBytesToHex(dataBytes)
-	
-	// STEP 1-6
+
 	dataPoly := bytesToInts(dataBytes)
 	generatorPoly := getGeneratorPolynomial(7)
 	remainderPoly := polyDiv(polyLeftShift(dataPoly, 7), generatorPoly)
-	
-	// STEP 1-7
+
 	codewordPoly := polyAdd(polyLeftShift(dataPoly, 7), remainderPoly)
 	codewordBytes := intsToBytes(codewordPoly)
-	
+
 	data.Intermediate.DataPolynomial = formatPolynomial(dataPoly, "d")
 	data.Intermediate.ErrorCorrectionPolynomial = formatPolynomial(remainderPoly, "r")
 	data.Intermediate.CodewordPolynomial = formatPolynomial(codewordPoly, "c")
@@ -171,7 +164,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 
 	return data, nil
 }
-
 
 // --- 初期化 ---
 
@@ -360,7 +352,7 @@ func formatPolynomial(p []int, varName string) string {
 		isFirstTerm = false
 
 		if coeff > 1 {
-			// α^0 は 1 なので表示しない
+			// α^0 は 表示しない
 			if logTable[coeff] > 0 {
 				b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
 			}
