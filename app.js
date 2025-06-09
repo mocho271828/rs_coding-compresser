@@ -72,14 +72,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // ボタンクリック時のイベントリスナー
         runButton.addEventListener('click', () => {
-            const inputValue = kanjiInput.value;
-            // Go側でグローバルに登録した processKanji 関数を呼び出す
-            const result = window.processKanji(inputValue);
+            try {
+                const inputValue = kanjiInput.value;
+                const result = window.processKanji(inputValue);
 
-            if (result.error) {
-                displayError(result.error);
-            } else {
-                displayResults(result);
+                // result が存在し、かつ error プロパティを持つかチェック
+                if (result && result.error) {
+                    displayError(result.error);
+                } else if (result) {
+                    // result が正常に返ってきた場合
+                    displayResults(result);
+                } else {
+                    // 通常は発生しないが、万が一 result が null や undefined だった場合
+                    displayError('不明なエラーが発生しました. 戻り値が空です.');
+                }
+
+            } catch (err) {
+                // Go (WASM) がパニックを起こした場合の例外をここで捕捉
+                console.error("WASM module crashed:", err);
+                displayError("処理モジュールがクラッシュしました. 開発者コンソールを確認してください.");
+                // 必要に応じて、ステータス表示なども更新
+                document.getElementById('status').textContent = 'エラー: WASMモジュールがクラッシュしました.';
             }
         });
 
