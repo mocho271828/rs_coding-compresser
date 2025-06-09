@@ -131,12 +131,12 @@ func processKanji(this js.Value, args []js.Value) any {
 	intermediate.CodewordHex = formatBytesToHex(codewordBytes)
 	intermediate.CodewordBinary = formatBytesToBinary(codewordBytes)
 
-	// 構造体をマップに変換してJavaScriptに渡す
-	// js.ValueOfはGoのデータ構造をJavaScriptのオブジェクトに自動的に変換してくれる
-	return js.ValueOf(map[string]any{
+	// Goのネイティブなマップをそのまま返す.
+	// 変換はjs.FuncOfが自動的に行ってくれる.
+	return map[string]any{
 		"results":      results,
 		"intermediate": intermediate,
-	})
+	}
 }
 
 // --- 以下のヘルパー関数群は変更なし (ただし、HTTP関連は不要になったため削除) ---
