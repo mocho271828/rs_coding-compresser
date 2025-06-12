@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -20,8 +21,10 @@ var logTable [256]int
 
 const primitivePolynomial = 0x11D // 原始多項式: x^8 + x^4 + x^3 + x^2 + 1
 
-// RS符号の生成多項式の係数 (alphaのべき乗)
-var generatorPolyExponents = []int{87, 229, 146, 149, 238, 102, 21}
+// マスクパターン (パターン番号3)
+const maskPatternHex = "99 99 99 66 66 66 99 99 99 66 66 66 99 99 99 96 66 99 96 66 66 66 99 99 66 99"
+
+var maskPatternBytes []byte
 
 // --- 構造体定義 (JSON出力用にタグを追加) ---
 
@@ -48,57 +51,80 @@ type QRCodeIntermediateData struct {
 	TerminatedBinary          string `json:"TerminatedBinary"`
 	PaddedBinaryBlocks        string `json:"PaddedBinaryBlocks"`
 	PaddedHex                 string `json:"PaddedHex"`
+	PaddedBinary              string `json:"PaddedBinary"`
 	DataPolynomial            string `json:"DataPolynomial"`
 	ErrorCorrectionPolynomial string `json:"ErrorCorrectionPolynomial"`
 	CodewordPolynomial        string `json:"CodewordPolynomial"`
 	CodewordHex               string `json:"CodewordHex"`
 	CodewordBinary            string `json:"CodewordBinary"`
+	MaskPatternHex            string `json:"MaskPatternHex"`
+	MaskedCodewordHex         string `json:"MaskedCodewordHex"`
+	MaskedCodewordBinary      string `json:"MaskedCodewordBinary"`
 }
 
 // --- main関数 (Wasmエントリーポイント) ---
 
 func main() {
-	// GF(2^8) テーブルを初期化
 	initGF()
+	initMaskPattern()
 
-	// JavaScriptから呼び出すための関数 "encodeQRCode" をグローバルスコープに登録
-	js.Global().Set("encodeQRCode", js.FuncOf(encodeQRCodeWrapper))
+	js.Global().Set("generateDataCodewords", js.FuncOf(generateDataCodewordsWrapper))
+	js.Global().Set("applyEcc", js.FuncOf(applyEccWrapper))
+	js.Global().Set("applyMask", js.FuncOf(applyMaskWrapper))
 
-	// Goのプログラムが終了しないように待機
 	<-make(chan bool)
 }
 
-// encodeQRCodeWrapper はJavaScriptからの呼び出しをラップし, JSON文字列を返す
-func encodeQRCodeWrapper(this js.Value, args []js.Value) interface{} {
+// generateDataCodewordsWrapper は STEP1-2 を行う
+func generateDataCodewordsWrapper(this js.Value, args []js.Value) interface{} {
 	if len(args) != 1 {
 		return createErrorResponse("Invalid number of arguments")
 	}
-	kanjiInput := args[0].String()
-
-	data, err := processKanji(kanjiInput)
+	data, err := processStep1To2(args[0].String())
 	if err != nil {
-		errorData := TemplateData{Error: err.Error()}
-		responseBytes, _ := json.Marshal(errorData)
-		return string(responseBytes)
+		return createErrorResponse(err.Error())
 	}
-
-	responseBytes, err := json.Marshal(data)
-	if err != nil {
-		return createErrorResponse("Failed to serialize result to JSON")
-	}
-
+	responseBytes, _ := json.Marshal(data)
 	return string(responseBytes)
 }
 
-// createErrorResponse はエラー情報を含むJSON文字列を作成するヘルパー
+// applyEccWrapper は STEP3 を行う
+func applyEccWrapper(this js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		return createErrorResponse("Invalid number of arguments")
+	}
+	// 引数を2進数文字列として受け取る
+	data, err := processStep3(args[0].String())
+	if err != nil {
+		return createErrorResponse(err.Error())
+	}
+	responseBytes, _ := json.Marshal(data)
+	return string(responseBytes)
+}
+
+// applyMaskWrapper は STEP4 を行う
+func applyMaskWrapper(this js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		return createErrorResponse("Invalid number of arguments")
+	}
+	// 引数を2進数文字列として受け取る
+	data, err := processStep4(args[0].String())
+	if err != nil {
+		return createErrorResponse(err.Error())
+	}
+	responseBytes, _ := json.Marshal(data)
+	return string(responseBytes)
+}
+
+// createErrorResponse はエラー情報を含むJSON文字列を作成する
 func createErrorResponse(message string) string {
 	errorData := TemplateData{Error: message}
 	responseBytes, _ := json.Marshal(errorData)
 	return string(responseBytes)
 }
 
-// processKanji はHTTPに依存しないデータ符号化のコアロジック
-func processKanji(kanjiInput string) (TemplateData, error) {
+// processStep1To2 は漢字入力からデータコード語を生成する (STEP 1-2)
+func processStep1To2(kanjiInput string) (TemplateData, error) {
 	data := TemplateData{MaxCharCount: maxCharCount, KanjiInput: kanjiInput}
 	runes := []rune(kanjiInput)
 
@@ -123,7 +149,11 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 	modeIndicator := "1000"
 	charCountIndicator := fmt.Sprintf("%08b", len(runes))
 	initialBitStream := modeIndicator + charCountIndicator + binaryBuilder.String()
-	terminatedBitStream := initialBitStream + "0000"
+	terminatedBitStream := initialBitStream
+	if len(terminatedBitStream) < 19*8-4 {
+		terminatedBitStream += "0000"
+	}
+
 	data.Intermediate.ModeIndicator = modeIndicator
 	data.Intermediate.CharCountIndicator = charCountIndicator
 	data.Intermediate.ConcatenatedBinary = binaryBuilder.String()
@@ -140,7 +170,6 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 	data.Intermediate.PaddedBinaryBlocks = strings.Join(paddedBinaryBlocks, " ")
 
 	dataBytes := bitStreamToBytes(paddedStream)
-	// 仕様: データコード語が19個に満たない場合、交互に 11101100 (EC) と 00010001 (11) を追加
 	paddingBytes := []byte{0xEC, 0x11}
 	paddingIndex := 0
 	for len(dataBytes) < 19 {
@@ -148,14 +177,31 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 		paddingIndex = (paddingIndex + 1) % 2
 	}
 	data.Intermediate.PaddedHex = formatBytesToHex(dataBytes)
+	// 2進数表現も生成して格納
+	data.Intermediate.PaddedBinary = formatBytesToBinary(dataBytes)
+
+	return data, nil
+}
+
+// processStep3 はデータコード語(2進数)からRS符号化を行う (STEP 3)
+func processStep3(dataCodewordsBinary string) (TemplateData, error) {
+	dataBytes, err := binaryStringToBytes(dataCodewordsBinary)
+	if err != nil {
+		return TemplateData{}, fmt.Errorf("データコード語の2進数文字列の解析に失敗しました: %v", err)
+	}
+	if len(dataBytes) != 19 {
+		return TemplateData{}, fmt.Errorf("データコード語は19バイトである必要がありますが, %dバイトでした.", len(dataBytes))
+	}
 
 	dataPoly := bytesToInts(dataBytes)
 	generatorPoly := getGeneratorPolynomial(7)
 	remainderPoly := polyDiv(polyLeftShift(dataPoly, 7), generatorPoly)
-
 	codewordPoly := polyAdd(polyLeftShift(dataPoly, 7), remainderPoly)
 	codewordBytes := intsToBytes(codewordPoly)
 
+	var data TemplateData
+	data.Intermediate.PaddedHex = formatBytesToHex(dataBytes)
+	data.Intermediate.PaddedBinary = formatBytesToBinary(dataBytes)
 	data.Intermediate.DataPolynomial = formatPolynomial(dataPoly, "d")
 	data.Intermediate.ErrorCorrectionPolynomial = formatPolynomial(remainderPoly, "r")
 	data.Intermediate.CodewordPolynomial = formatPolynomial(codewordPoly, "c")
@@ -165,8 +211,34 @@ func processKanji(kanjiInput string) (TemplateData, error) {
 	return data, nil
 }
 
-// --- 初期化 ---
+// processStep4 は符号語(2進数)にマスク処理を行う (STEP 4)
+func processStep4(codewordBinary string) (TemplateData, error) {
+	codewordBytes, err := binaryStringToBytes(codewordBinary)
+	if err != nil {
+		return TemplateData{}, fmt.Errorf("符号語の2進数文字列の解析に失敗しました: %v", err)
+	}
+	if len(codewordBytes) != 26 {
+		return TemplateData{}, fmt.Errorf("符号語は26バイトである必要がありますが, %dバイトでした.", len(codewordBytes))
+	}
 
+	maskedBytes := make([]byte, len(codewordBytes))
+	for i := range codewordBytes {
+		maskedBytes[i] = codewordBytes[i] ^ maskPatternBytes[i]
+	}
+
+	var data TemplateData
+	// マスク適用前のデータも返す
+	data.Intermediate.CodewordHex = formatBytesToHex(codewordBytes)
+	data.Intermediate.CodewordBinary = formatBytesToBinary(codewordBytes)
+	data.Intermediate.MaskPatternHex = maskPatternHex
+	data.Intermediate.MaskedCodewordHex = formatBytesToHex(maskedBytes)
+	data.Intermediate.MaskedCodewordBinary = formatBytesToBinary(maskedBytes)
+
+	return data, nil
+}
+
+// (その他の関数は変更なし)
+// --- 初期化 ---
 func initGF() {
 	x := 1
 	for i := 0; i < 255; i++ {
@@ -180,8 +252,15 @@ func initGF() {
 	expTable[255] = 1
 }
 
-// --- 漢字圧縮関連 ---
+func initMaskPattern() {
+	bytes, err := hexStringToBytes(maskPatternHex)
+	if err != nil {
+		panic(fmt.Sprintf("固定マスクパターンの初期化に失敗しました: %v", err))
+	}
+	maskPatternBytes = bytes
+}
 
+// --- 漢字圧縮関連 ---
 func compressKanjiString(kanjiInput string) ([]KanjiCompressionResult, error) {
 	shiftJISBytes, err := convertToShiftJIS(kanjiInput)
 	if err != nil {
@@ -227,21 +306,18 @@ func compressKanjiString(kanjiInput string) ([]KanjiCompressionResult, error) {
 	}
 	return results, nil
 }
-
 func convertToShiftJIS(s string) ([]byte, error) {
 	encoder := japanese.ShiftJIS.NewEncoder()
 	return encoder.Bytes([]byte(s))
 }
 
 // --- GF(2^8)および多項式演算 ---
-
 func gfMul(a, b int) int {
 	if a == 0 || b == 0 {
 		return 0
 	}
 	return expTable[(logTable[a]+logTable[b])%255]
 }
-
 func polyAdd(p1, p2 []int) []int {
 	maxLen := len(p1)
 	if len(p2) > maxLen {
@@ -260,42 +336,48 @@ func polyAdd(p1, p2 []int) []int {
 	}
 	return result
 }
-
 func polyLeftShift(p []int, count int) []int {
 	result := make([]int, len(p)+count)
 	copy(result[count:], p)
 	return result
 }
-
 func polyDiv(dividend []int, divisor []int) []int {
 	result := make([]int, len(dividend))
 	copy(result, dividend)
+	divLen := len(divisor)
+	resLen := len(result)
 
-	for i := len(result) - len(divisor); i >= 0; i-- {
-		coeff := result[i+len(divisor)-1]
+	for i := resLen - 1; i >= divLen-1; i-- {
+		coeff := result[i]
 		if coeff == 0 {
 			continue
 		}
 		logCoeff := logTable[coeff]
-		for j := 0; j < len(divisor); j++ {
+		for j := 0; j < divLen; j++ {
 			term := gfMul(divisor[j], expTable[logCoeff])
-			result[i+j] ^= term
+			result[i-divLen+1+j] ^= term
 		}
 	}
-	return result[:len(divisor)-1]
+	return result[:divLen-1]
 }
-
 func getGeneratorPolynomial(degree int) []int {
-	coeffs := make([]int, degree+1)
-	coeffs[degree] = 1 // x^7 の係数
-	for i, exp := range generatorPolyExponents {
-		coeffs[degree-1-i] = expTable[exp]
+	p := []int{1}
+	for i := 0; i < degree; i++ {
+		nextP := make([]int, len(p)+1)
+		alphaI := expTable[i]
+		for j := 0; j < len(p); j++ {
+			nextP[j+1] ^= p[j]
+			nextP[j] ^= gfMul(p[j], alphaI)
+		}
+		p = nextP
 	}
-	return coeffs
+	for i, j := 0, len(p)-1; i < j; i, j = i+1, j-1 {
+		p[i], p[j] = p[j], p[i]
+	}
+	return p
 }
 
 // --- ヘルパー関数 ---
-
 func bitStreamToBytes(s string) []byte {
 	var b []byte
 	for i := 0; i < len(s); i += 8 {
@@ -305,6 +387,46 @@ func bitStreamToBytes(s string) []byte {
 	return b
 }
 
+func binaryStringToBytes(binaryStr string) ([]byte, error) {
+	cleanedBinary := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			return -1
+		}
+		return r
+	}, binaryStr)
+
+	if len(cleanedBinary)%8 != 0 {
+		return nil, fmt.Errorf("2進数文字列の長さが8の倍数ではありません")
+	}
+
+	var decoded []byte
+	for i := 0; i < len(cleanedBinary); i += 8 {
+		val, err := strconv.ParseUint(cleanedBinary[i:i+8], 2, 8)
+		if err != nil {
+			return nil, fmt.Errorf("2進数文字列のパースに失敗しました: %v", err)
+		}
+		decoded = append(decoded, byte(val))
+	}
+	return decoded, nil
+}
+
+func hexStringToBytes(hexStr string) ([]byte, error) {
+	cleanedHex := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			return -1
+		}
+		return r
+	}, hexStr)
+
+	if len(cleanedHex)%2 != 0 {
+		return nil, fmt.Errorf("16進数文字列の長さが奇数です")
+	}
+	decoded, err := hex.DecodeString(cleanedHex)
+	if err != nil {
+		return nil, fmt.Errorf("16進数文字列のデコードに失敗しました: %v", err)
+	}
+	return decoded, nil
+}
 func formatBytesToHex(data []byte) string {
 	var hexParts []string
 	for _, b := range data {
@@ -312,7 +434,6 @@ func formatBytesToHex(data []byte) string {
 	}
 	return strings.Join(hexParts, " ")
 }
-
 func formatBytesToBinary(data []byte) string {
 	var binParts []string
 	for _, b := range data {
@@ -320,28 +441,33 @@ func formatBytesToBinary(data []byte) string {
 	}
 	return strings.Join(binParts, " ")
 }
-
 func bytesToInts(b []byte) []int {
 	ints := make([]int, len(b))
 	for i, v := range b {
 		ints[i] = int(v)
 	}
+	for i, j := 0, len(ints)-1; i < j; i, j = i+1, j-1 {
+		ints[i], ints[j] = ints[j], ints[i]
+	}
 	return ints
 }
-
 func intsToBytes(i []int) []byte {
-	bytes := make([]byte, len(i))
-	for j, v := range i {
+	reversedInts := make([]int, len(i))
+	for k, v := range i {
+		reversedInts[len(i)-1-k] = v
+	}
+	bytes := make([]byte, len(reversedInts))
+	for j, v := range reversedInts {
 		bytes[j] = byte(v)
 	}
 	return bytes
 }
-
 func formatPolynomial(p []int, varName string) string {
 	var b strings.Builder
 	isFirstTerm := true
-	for i := len(p) - 1; i >= 0; i-- {
+	for i := 0; i < len(p); i++ {
 		coeff := p[i]
+		power := len(p) - 1 - i
 		if coeff == 0 {
 			continue
 		}
@@ -351,20 +477,22 @@ func formatPolynomial(p []int, varName string) string {
 		}
 		isFirstTerm = false
 
-		if coeff > 1 {
-			// α^0 は 表示しない
-			if logTable[coeff] > 0 {
-				b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
-			}
+		if coeff > 1 && power > 0 {
+			b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
+		} else if coeff > 1 && power == 0 {
+			b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
+			continue
 		}
 
-		if i > 0 {
+		if power > 0 {
 			b.WriteString(fmt.Sprintf("%s", varName))
-			if i > 1 {
-				b.WriteString(fmt.Sprintf("^{%d}", i))
+			if power > 1 {
+				b.WriteString(fmt.Sprintf("^{%d}", power))
 			}
-		} else if coeff == 1 {
-			b.WriteString("1")
+		} else {
+			if coeff == 1 {
+				b.WriteString("1")
+			}
 		}
 	}
 	if isFirstTerm {

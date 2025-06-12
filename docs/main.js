@@ -29,92 +29,111 @@ async function initWasm() {
 document.getElementById('encodeForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const kanjiInput = document.getElementById('kanjiInput').value;
-
-    // JavaScriptに公開されたGoの関数を呼び出す
-    const resultJson = window.encodeQRCode(kanjiInput);
-    const data = JSON.parse(resultJson);
-
-    // 結果を描画する
-    renderResults(data);
+    const resultJson = window.generateDataCodewords(kanjiInput);
+    renderStep1And2(JSON.parse(resultJson));
 });
 
-// 結果をHTMLに描画する
-function renderResults(data) {
-    const errorContainer = document.getElementById('error-container');
-    const resultsContainer = document.getElementById('results-container');
-    
-    // エラー表示をリセット
-    errorContainer.style.display = 'none';
-    errorContainer.textContent = '';
+document.getElementById('eccForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const dataCodewordsBinary = document.getElementById('dataCodewordsBinaryInput').value;
+    const resultJson = window.applyEcc(dataCodewordsBinary);
+    renderStep3(JSON.parse(resultJson));
+});
 
+document.getElementById('maskForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const codewordBinary = document.getElementById('codewordBinaryInput').value;
+    const resultJson = window.applyMask(codewordBinary);
+    renderStep4(JSON.parse(resultJson));
+});
+
+// エラー表示を管理する関数
+function displayError(message) {
+    const errorContainer = document.getElementById('error-container');
+    errorContainer.textContent = message;
+    errorContainer.style.display = message ? 'block' : 'none';
+}
+
+// STEP1とSTEP2の結果を描画
+function renderStep1And2(data) {
+    displayError(data.Error);
     if (data.Error) {
-        errorContainer.textContent = data.Error;
-        errorContainer.style.display = 'block';
-        resultsContainer.style.display = 'none';
+        document.getElementById('results-container').style.display = 'none';
         return;
     }
+    document.getElementById('results-container').style.display = 'block';
     
-    resultsContainer.style.display = 'block';
+    const section = document.getElementById('step1-and-2-section');
+    section.style.display = 'block';
 
-    // STEP1: 13ビット圧縮
-    const step1Results = document.getElementById('step1-results');
-    step1Results.innerHTML = data.Results.map(res => `
+    section.querySelector('#step1-results').innerHTML = data.Results.map(res => `
         <div class="result-item">
             <span class="kanji-char">${res.Kanji}</span>
-            <strong>漢字:</strong> ${res.Kanji}<br>
-            <div class="step"><strong>1.</strong> Shift JIS 漢字コードに変換: <span class="step-value">${res.ShiftJISCode}</span></div>
-            <div class="step"><strong>2.</strong> 基準値の減算: <span class="step-value">${res.SubtractedCode}</span></div>
-            <div class="step"><strong>3.</strong> 上位バイトに C0_16 を乗じ, 下位バイトを加算: <span class="step-value">${res.CompressedHex}</span></div>
-            <div class="step"><strong>4.</strong> 13ビットの2進数に変換: <span class="step-value">${res.Binary13Bit}</span></div>
-        </div>
-    `).join('');
-
-    // STEP2: データコード語の生成
-    const step2Results = document.getElementById('step2-results');
-    step2Results.innerHTML = `
-        <strong>連結ビットストリーム:</strong><br>
-        <div class="step"><strong>モード指示子 (漢字: 1000):</strong> <span class="step-value">${data.Intermediate.ModeIndicator}</span></div>
-        <div class="step"><strong>文字数指示子 (${data.Results.length}文字):</strong> <span class="step-value">${data.Intermediate.CharCountIndicator}</span></div>
-        <div class="step"><strong>連結データ:</strong> <span class="step-value">${data.Intermediate.ConcatenatedBinary}</span></div>
-        <div class="step"><strong>終端パターン (0000) 付加後:</strong> <span class="step-value">${data.Intermediate.TerminatedBinary}</span></div>
+            <div class="step"><strong>1.</strong> Shift JIS: <span class="step-value">${res.ShiftJISCode}</span></div>
+            <div class="step"><strong>2.</strong> 減算後: <span class="step-value">${res.SubtractedCode}</span></div>
+            <div class="step"><strong>3.</strong> 圧縮後: <span class="step-value">${res.CompressedHex}</span></div>
+            <div class="step"><strong>4.</strong> 13bit変換後: <span class="step-value">${res.Binary13Bit}</span></div>
+        </div>`).join('');
+    
+    section.querySelector('#step2-results').innerHTML = `
+        <div class="step"><strong>モード指示子 + 文字数指示子 + 連結データ:</strong> <span class="step-value">${data.Intermediate.ModeIndicator} ${data.Intermediate.CharCountIndicator} ${data.Intermediate.ConcatenatedBinary}</span></div>
+        <div class="step"><strong>終端パターン付加後:</strong> <span class="step-value">${data.Intermediate.TerminatedBinary}</span></div>
         <div class="step"><strong>8ビット区切り (パディング後):</strong> <span class="step-value">${data.Intermediate.PaddedBinaryBlocks}</span></div>
-        <div class="step"><strong>埋め草コード語付加後 (19バイト):</strong> <br><span class="step-value">${data.Intermediate.PaddedHex}</span></div>
-    `;
+        <div class="step"><strong>埋め草コード語付加後 (16進数, 19バイト):</strong> <br><span class="step-value">${data.Intermediate.PaddedHex}</span></div>
+        <div class="step"><strong>最終データコード語 (2進数, 19バイト):</strong> <br><span class="step-value">${data.Intermediate.PaddedBinary}</span></div>`;
 
-    // STEP3: リード・ソロモン符号化
-    const step3Results = document.getElementById('step3-results');
-    step3Results.innerHTML = `
-        <p>生成多項式 $G(x)$:</p>
-        <div class="math-block">
-            $$ G(x) = x^7 + \\alpha^{87}x^6 + \\alpha^{229}x^5 + \\alpha^{146}x^4 + \\alpha^{149}x^3 + \\alpha^{238}x^2 + \\alpha^{102}x + \\alpha^{21} $$
-        </div>
+    document.getElementById('dataCodewordsBinaryInput').value = data.Intermediate.PaddedBinary;
+    document.getElementById('ecc-form-section').style.display = 'block';
+    document.getElementById('step3-section').style.display = 'none';
+    document.getElementById('mask-form-section').style.display = 'none';
+    document.getElementById('step4-section').style.display = 'none';
+}
 
+// STEP3の結果を描画
+function renderStep3(data) {
+    displayError(data.Error);
+    const section = document.getElementById('step3-section');
+    section.style.display = data.Error ? 'none' : 'block';
+    if(data.Error) return;
+
+    const resultsDiv = document.getElementById('step3-results');
+    resultsDiv.innerHTML = `
         <p>データ多項式 $I(x)$:</p>
-        <div class="math-block">
-            $$ I(x) = ${data.Intermediate.DataPolynomial} $$
-        </div>
-
+        <div class="math-block">$$ I(x) = ${data.Intermediate.DataPolynomial} $$</div>
         <p>誤り訂正多項式 $R(x) = [I(x)x^7] \\pmod{G(x)}$:</p>
-        <div class="math-block">
-            $$ R(x) = ${data.Intermediate.ErrorCorrectionPolynomial} $$
-        </div>
-
+        <div class="math-block">$$ R(x) = ${data.Intermediate.ErrorCorrectionPolynomial} $$</div>
         <p>符号語多項式 $X(x) = I(x)x^7 + R(x)$:</p>
-        <div class="math-block">
-            $$ X(x) = ${data.Intermediate.CodewordPolynomial} $$
-        </div>
+        <div class="math-block">$$ X(x) = ${data.Intermediate.CodewordPolynomial} $$</div>
+        <p><strong>符号語 (16進数, 26バイト):</strong></p>
+        <div class="step-value">${data.Intermediate.CodewordHex}</div>
+        <p><strong>符号語 (2進数, 26バイト):</strong></p>
+        <div class="step-value">${data.Intermediate.CodewordBinary}</div>`;
 
-        <p><strong>最終符号語 (16進数ベクトル, 26バイト):</strong></p>
-        <div class="step-value" style="white-space: pre-wrap;">${data.Intermediate.CodewordHex}</div>
+    document.getElementById('codewordBinaryInput').value = data.Intermediate.CodewordBinary;
+    document.getElementById('mask-form-section').style.display = 'block';
+    document.getElementById('step4-section').style.display = 'none';
 
-        <p><strong>最終符号語 (2進数ベクトル):</strong></p>
-        <div class="step-value" style="white-space: pre-wrap;">${data.Intermediate.CodewordBinary}</div>
-    `;
-
-    // MathJaxに新しい数式をレンダリングさせる
     if (window.MathJax) {
-        window.MathJax.typeset();
+        window.MathJax.typesetPromise([resultsDiv]).catch((err) => console.log('MathJax typeset failed: ', err));
     }
+}
+
+// STEP4の結果を描画
+function renderStep4(data) {
+    displayError(data.Error);
+    const section = document.getElementById('step4-section');
+    section.style.display = data.Error ? 'none' : 'block';
+    if(data.Error) return;
+
+    document.getElementById('step4-results').innerHTML = `
+        <p>マスク適用前の符号語 (2進数):</p>
+        <div class="step-value">${data.Intermediate.CodewordBinary}</div>
+        <p>マスクパターン (パターン番号3):</p>
+        <div class="step-value">${data.Intermediate.MaskPatternHex}</div>
+        <p><strong>マスク適用後の最終データ (16進数):</strong></p>
+        <div class="step-value">${data.Intermediate.MaskedCodewordHex}</div>
+        <p><strong>マスク適用後の最終データ (2進数):</strong></p>
+        <div class="step-value">${data.Intermediate.MaskedCodewordBinary}</div>`;
 }
 
 // Wasmの初期化を実行
