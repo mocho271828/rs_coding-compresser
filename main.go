@@ -150,7 +150,8 @@ func processStep1To2(kanjiInput string) (TemplateData, error) {
 	charCountIndicator := fmt.Sprintf("%08b", len(runes))
 	initialBitStream := modeIndicator + charCountIndicator + binaryBuilder.String()
 	terminatedBitStream := initialBitStream
-	if len(terminatedBitStream) < 19*8-4 {
+
+	if len(terminatedBitStream)+4 <= 19*8 {
 		terminatedBitStream += "0000"
 	}
 
@@ -177,7 +178,6 @@ func processStep1To2(kanjiInput string) (TemplateData, error) {
 		paddingIndex = (paddingIndex + 1) % 2
 	}
 	data.Intermediate.PaddedHex = formatBytesToHex(dataBytes)
-	// 2進数表現も生成して格納
 	data.Intermediate.PaddedBinary = formatBytesToBinary(dataBytes)
 
 	return data, nil
@@ -237,7 +237,6 @@ func processStep4(codewordBinary string) (TemplateData, error) {
 	return data, nil
 }
 
-// (その他の関数は変更なし)
 // --- 初期化 ---
 func initGF() {
 	x := 1
@@ -324,21 +323,20 @@ func polyAdd(p1, p2 []int) []int {
 		maxLen = len(p2)
 	}
 	result := make([]int, maxLen)
-	for i := 0; i < maxLen; i++ {
-		val1, val2 := 0, 0
-		if i < len(p1) {
-			val1 = p1[i]
-		}
-		if i < len(p2) {
-			val2 = p2[i]
-		}
-		result[i] = val1 ^ val2
+
+	// p1の係数をコピー
+	copy(result, p1)
+
+	// p2の係数を加算(XOR)
+	offset := len(result) - len(p2)
+	for i := 0; i < len(p2); i++ {
+		result[offset+i] ^= p2[i]
 	}
 	return result
 }
 func polyLeftShift(p []int, count int) []int {
 	result := make([]int, len(p)+count)
-	copy(result[count:], p)
+	copy(result, p)
 	return result
 }
 func polyDiv(dividend []int, divisor []int) []int {
@@ -347,33 +345,44 @@ func polyDiv(dividend []int, divisor []int) []int {
 	divLen := len(divisor)
 	resLen := len(result)
 
-	for i := resLen - 1; i >= divLen-1; i-- {
+	for i := 0; i <= resLen-divLen; i++ {
 		coeff := result[i]
 		if coeff == 0 {
 			continue
 		}
-		logCoeff := logTable[coeff]
+		// QRコードの生成多項式の最高次係数は常に1なので, 逆元の計算は不要
+		factor := coeff
 		for j := 0; j < divLen; j++ {
-			term := gfMul(divisor[j], expTable[logCoeff])
-			result[i-divLen+1+j] ^= term
+			result[i+j] ^= gfMul(divisor[j], factor)
 		}
 	}
-	return result[:divLen-1]
+	// 剰余部分を返す
+	return result[resLen-divLen+1:]
 }
 func getGeneratorPolynomial(degree int) []int {
+	// pは計算過程では低次の係数から格納される. 初期値は g(x) = 1.
 	p := []int{1}
+
 	for i := 0; i < degree; i++ {
+		// p(x) * (x + α^i) を計算する.
 		nextP := make([]int, len(p)+1)
 		alphaI := expTable[i]
+
+		// p(x) * α^i の項を計算
+		for j := 0; j < len(p); j++ {
+			nextP[j] = gfMul(p[j], alphaI)
+		}
+		// p(x) * x の項を加算 (pの各係数を1つ後ろにずらす)
 		for j := 0; j < len(p); j++ {
 			nextP[j+1] ^= p[j]
-			nextP[j] ^= gfMul(p[j], alphaI)
 		}
 		p = nextP
 	}
+
 	for i, j := 0, len(p)-1; i < j; i, j = i+1, j-1 {
 		p[i], p[j] = p[j], p[i]
 	}
+
 	return p
 }
 
@@ -441,23 +450,18 @@ func formatBytesToBinary(data []byte) string {
 	}
 	return strings.Join(binParts, " ")
 }
+
 func bytesToInts(b []byte) []int {
 	ints := make([]int, len(b))
 	for i, v := range b {
 		ints[i] = int(v)
 	}
-	for i, j := 0, len(ints)-1; i < j; i, j = i+1, j-1 {
-		ints[i], ints[j] = ints[j], ints[i]
-	}
 	return ints
 }
+
 func intsToBytes(i []int) []byte {
-	reversedInts := make([]int, len(i))
-	for k, v := range i {
-		reversedInts[len(i)-1-k] = v
-	}
-	bytes := make([]byte, len(reversedInts))
-	for j, v := range reversedInts {
+	bytes := make([]byte, len(i))
+	for j, v := range i {
 		bytes[j] = byte(v)
 	}
 	return bytes
@@ -477,19 +481,20 @@ func formatPolynomial(p []int, varName string) string {
 		}
 		isFirstTerm = false
 
-		if coeff > 1 && power > 0 {
+		// 係数が1の場合はαの表記を省略 (ただし定数項を除く)
+		if coeff > 1 {
 			b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
-		} else if coeff > 1 && power == 0 {
-			b.WriteString(fmt.Sprintf("\\alpha^{%d}", logTable[coeff]))
-			continue
 		}
 
 		if power > 0 {
+			if coeff > 1 {
+				b.WriteString(" \\cdot ") // 係数と変数の間にドットを追加
+			}
 			b.WriteString(fmt.Sprintf("%s", varName))
 			if power > 1 {
 				b.WriteString(fmt.Sprintf("^{%d}", power))
 			}
-		} else {
+		} else { // 定数項
 			if coeff == 1 {
 				b.WriteString("1")
 			}
