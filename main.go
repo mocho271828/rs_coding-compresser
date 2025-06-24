@@ -202,9 +202,9 @@ func processStep3(dataCodewordsBinary string) (TemplateData, error) {
 	var data TemplateData
 	data.Intermediate.PaddedHex = formatBytesToHex(dataBytes)
 	data.Intermediate.PaddedBinary = formatBytesToBinary(dataBytes)
-	data.Intermediate.DataPolynomial = formatPolynomial(dataPoly, "d")
-	data.Intermediate.ErrorCorrectionPolynomial = formatPolynomial(remainderPoly, "r")
-	data.Intermediate.CodewordPolynomial = formatPolynomial(codewordPoly, "c")
+	data.Intermediate.DataPolynomial = formatPolynomial(dataPoly, "x")
+	data.Intermediate.ErrorCorrectionPolynomial = formatPolynomial(remainderPoly, "x")
+	data.Intermediate.CodewordPolynomial = formatPolynomial(codewordPoly, "x")
 	data.Intermediate.CodewordHex = formatBytesToHex(codewordBytes)
 	data.Intermediate.CodewordBinary = formatBytesToBinary(codewordBytes)
 
