@@ -28,11 +28,32 @@
         .step-value { font-family: 'Consolas', 'Monaco', monospace; background-color: #e9ecef; padding: 2px 5px; border-radius: 3px; word-wrap: break-word; white-space: pre-wrap;}
         .kanji-char { font-size: 1.5em; font-weight: bold; color: #28a745; margin-right: 10px; }
         .math-block { margin-top: 10px; font-size: 1.1em; text-align: center; }
+
+        .download-link {
+            display: block;
+            width: fit-content;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #28a745; /* ボタンの色を緑色に設定 */
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        .download-link:hover {
+            background-color: #218838;
+        }
+        
     </style>
 </head>
 <body>
     <div class="container">
         <h1>QRコード データ符号化ツール (誤り訂正レベルL)</h1>
+        <a href="qrcode.pdf" download="qrcode.pdf" class="download-link">
+            関連資料(PDF)をダウンロード
+        </a>
         
         <p id="status">Wasmモジュールを読み込み中...</p>
 
