@@ -201,10 +201,7 @@ function generateFinalQrMatrix(binaryString) {
             matrix[pos.r][pos.c] = parseInt(binaryString[i], 10);
         }
     }
-
-    const formatInfo = "111011110001001".split('').map(Number);
-    placeFormatInformation(matrix, formatInfo);
-
+    placeFormatInformation(matrix);
     return matrix;
 }
 
@@ -238,23 +235,29 @@ function placeStaticPatterns(matrix) {
 
 function placeFormatInformation(matrix, formatBits) {
     const qrSize = 21;
+    
+    const correctFormatBits = "111101110011011".split('').map(Number);
+
+    const positions1 = [
+        [8, 0], [8, 1], [8, 2], [8, 3], [8, 4], [8, 5], [8, 7], [8, 8],
+        [7, 8], [5, 8], [4, 8], [3, 8], [2, 8], [1, 8], [0, 8]
+    ];
+
     let bitIndex = 0;
-    const positions = [
-        [8,0], [8,1], [8,2], [8,3], [8,4], [8,5], [8,7],
-        [7,8], [5,8], [4,8], [3,8], [2,8], [1,8], [0,8],
-    ];
-    for(const pos of positions) {
-        matrix[pos[0]][pos[1]] = formatBits[bitIndex++];
+    for (const pos of positions1) {
+        matrix[pos[0]][pos[1]] = correctFormatBits[bitIndex++];
     }
-    bitIndex = 0;
+
     const positions2 = [
-        [qrSize-1, 8], [qrSize-2, 8], [qrSize-3, 8], [qrSize-4, 8], [qrSize-5, 8], [qrSize-6, 8], [qrSize-7, 8],
-        [8, qrSize-8], [8, qrSize-7], [8, qrSize-6], [8, qrSize-5], [8, qrSize-4], [8, qrSize-3], [8, qrSize-2], [8, qrSize-1],
+        [qrSize - 1, 8], [qrSize - 2, 8], [qrSize - 3, 8], [qrSize - 4, 8], 
+        [qrSize - 5, 8], [qrSize - 6, 8], [qrSize - 7, 8],
+        [8, qrSize - 8], [8, qrSize - 7], [8, qrSize - 6], [8, qrSize - 5], 
+        [8, qrSize - 4], [8, qrSize - 3], [8, qrSize - 2], [8, qrSize - 1]
     ];
-    const formatBitsMasked = "101010000010010".split('').map(Number);
-    for(let i = 0; i < 15; i++) {
-        const p = positions2[i];
-        matrix[p[0]][p[1]] = formatBits[i] ^ formatBitsMasked[i];
+
+    bitIndex = 0; 
+    for (const pos of positions2) {
+        matrix[pos[0]][pos[1]] = correctFormatBits[bitIndex++];
     }
 }
 
