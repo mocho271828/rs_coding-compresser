@@ -98,6 +98,15 @@
                 <h2>STEP4: マスク処理</h2>
                 <div class="process-item" id="step4-results"></div>
             </div>
+            <div class="results-section" id="step5-section" style="display: none;">
+                <h2>STEP5: QRコードの生成とマッピング</h2>
+                <div class="process-item">
+                    <p><strong>黒色で描画されるデータセルの位置番号 (1〜208):</strong></p>
+                    <div id="black-modules-list" class="step-value"></div>
+                    <p style="margin-top: 20px;"><strong>最終的なQRコード (バージョン1-L):</strong></p>
+                    <canvas id="qrCanvas" width="250" height="250" style="display: block; margin: 10px auto;"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 </body>
