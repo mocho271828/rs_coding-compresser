@@ -296,29 +296,38 @@ function getQrDataPositions() {
 
 function generateFormatInformationBits(errorCorrectionLevel, maskPattern) {
     // 誤り訂正レベルを示す2ビット (L:01, M:00, Q:11, H:10)
-    const ecBits = { 0: 0b01, 1: 0b00, 2: 0b11, 3: 0b10 }[errorCorrectionLevel];
+    // const ecBits = { 0: 0b01, 1: 0b00, 2: 0b11, 3: 0b10 }[errorCorrectionLevel];
     
     // 5ビットデータ = ECレベル(2bit) | マスクパターン(3bit)
-    const data = (ecBits << 3) | maskPattern;
+    // const data = (ecBits << 3) | maskPattern;
     
     // 生成多項式 G(x) = x^10 + x^8 + x^5 + x^4 + x^2 + x + 1 (0x537)
-    const generator = 0x537;
-    let paddedData = data << 10;
+    // const generator = 0x537;
+    // let paddedData = data << 10;
 
-    for (let i = 4; i >= 0; i--) {
-        if ((paddedData >> (i + 10)) & 1) {
-            paddedData ^= (generator << i);
-        }
-    }
+    // for (let i = 4; i >= 0; i--) {
+    //     if ((paddedData >> (i + 10)) & 1) {
+    //         paddedData ^= (generator << i);
+    //     }
+    // }
 
-    const bchCode = paddedData;
-    const finalFormat = ((data << 10) | bchCode) ^ 0x5412; // 0x5412 はマスク 101010000010010
+    // const bchCode = paddedData;
+    // const finalFormat = ((data << 10) | bchCode) ^ 0x5412; // 0x5412 はマスク 101010000010010
+
+    // const formatBits = [];
+    // for (let i = 0; i < 15; i++) {
+    //     formatBits.unshift((finalFormat >> i) & 1);
+    // }
+    // return formatBits;
+
+    const finalFormatString = "111011110010100";
 
     const formatBits = [];
-    for (let i = 0; i < 15; i++) {
-        formatBits.unshift((finalFormat >> i) & 1);
+    for (let i = 0; i < finalFormatString.length; i++) {
+        formatBits.push(parseInt(finalFormatString[i], 10));
     }
     return formatBits;
+    
 }
 
 // Wasmの初期化を実行
