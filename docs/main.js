@@ -288,6 +288,8 @@ function getQrDataPositions() {
         
         direction *= -1;
     }
+    console.log("Generated Data Positions (first 20):");
+    console.table(positions.slice(0, 20));
     return positions;
 }
 
