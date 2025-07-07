@@ -273,24 +273,19 @@ function getQrDataPositions() {
     let direction = -1;
 
     for (let c = qrSize - 1; c >= 0; c -= 2) {
-        if (c === 6) c--; 
+        if (c === 6) c--;
 
-        for (let col_offset = 0; col_offset < 2; col_offset++) {
-            const current_col = c - col_offset;
-
-            for (let r_offset = 0; r_offset < qrSize; r_offset++) {
-                const r = (direction === -1) ? (qrSize - 1 - r_offset) : r_offset;
-                
+        for (let r_offset = 0; r_offset < qrSize; r_offset++) {
+            const r = (direction === -1) ? (qrSize - 1 - r_offset) : r_offset;
+            for (let col_offset = 0; col_offset < 2; col_offset++) {
+                const current_col = c - col_offset;
                 if (matrix[r][current_col] === null) {
                     positions.push({ num: number++, r, c: current_col });
                 }
             }
         }
-        
         direction *= -1;
     }
-    console.log("Generated Data Positions (first 20):");
-    console.table(positions.slice(0, 20));
     return positions;
 }
 
@@ -327,7 +322,7 @@ function generateFormatInformationBits(errorCorrectionLevel, maskPattern) {
         formatBits.push(parseInt(finalFormatString[i], 10));
     }
     return formatBits;
-    
+
 }
 
 // Wasmの初期化を実行
