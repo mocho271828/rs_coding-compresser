@@ -135,7 +135,8 @@ function renderStep4(data) {
         <p><strong>マスク適用後の最終データ (2進数):</strong></p>
         <div class="step-value">${data.Intermediate.MaskedCodewordBinary}</div>`;
         if (!data.Error) {
-            renderStep5(data.Intermediate.MaskedCodewordBinary);
+            const pureBinaryString = data.Intermediate.MaskedCodewordBinary.replace(/\s/g, '');
+            renderStep5(pureBinaryString);
             document.getElementById('step5-section').style.display = 'block';
         } else {
             document.getElementById('step5-section').style.display = 'none';
